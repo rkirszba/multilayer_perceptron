@@ -8,16 +8,15 @@ import matplotlib.pyplot as plt
 class FTMultilayerPerceptron():
 
     def __init__(self, dimensions, max_epoch=1000, batch_size=200, hidden_activation='relu',\
-        output_activation='sigmoid', optimizer='gradient_descent', l2_reg=False,\
+        optimizer='gradient_descent', l2_reg=False,\
         dropout_reg=False, weight_initialization='he', alpha=1e-2, lambd=1e-1,\
-        keep_probs=None, early_stopping=False, beta_1=0.9, beta_2=0.999, epsilon=1e-8,\
+        keep_probs=None, early_stopping=False, beta=0.9, beta_1=0.9, beta_2=0.999, epsilon=1e-8,\
         random_state=None, verbose=None):
 
         self.dimensions_ = dimensions
         self.max_epoch_ = max_epoch
         self.batch_size_ = batch_size
         self.hidden_activation_ = hidden_activation
-        self.output_activation_ = output_activation
         self.optimizer_ = optimizer
         self.l2_reg_ = l2_reg
         self.dropout_reg_ = dropout_reg
@@ -59,18 +58,16 @@ class FTMultilayerPerceptron():
             'bengio': self._bengio_initialization
         }
 
-        self.forward_activations_ = {
+        self.forward_hidden_activations_ = {
             'relu': self._relu_forward,
             'tanh': self._tanh_forward,
-            'sigmoid': self._sigmoid_forward,
-            'softmax': self._softmax_forward
+            'sigmoid': self._sigmoid_forward
         }
     
-        self.backward_activations_ = {
+        self.backward_hidden_activations_ = {
             'relu': self._relu_backward,
             'tanh': self._tanh_backward,
-            'sigmoid': self._sigmoid_backward,
-            'softmax': self._softmax_backward
+            'sigmoid': self._sigmoid_backward
         }
 
         self.optimizers_initializers_ = {
@@ -82,7 +79,7 @@ class FTMultilayerPerceptron():
         self.optimizers_ = {
             'gradient_descent': self._gradient_descent_optimizer,
             'momentum': self._momentum_optimizer,
-            'rms_prop': self._rmsprop_optimizer,
+            'rmsprop': self._rmsprop_optimizer,
             'adam': self._adam_optimizer
         }
 
@@ -125,13 +122,13 @@ class FTMultilayerPerceptron():
         self.A_.append(1 / (1 + np.exp(-self.Z_[layer])))
 
     def _softmax_forward(self, layer):
-        self.A_.append(np.exp(self.Z_[layer]) / np.exp(self.Z_[layer]).sum(axis=0).reshape(1, -1))
+        self.A_.append(np.exp(self.Z_[layer]) / np.exp(self.Z_[layer]).sum(axis=0, keepdims=True))
     
     def _activation_forward(self, layer):
         if layer < len(self.dimensions_ - 1):
-            self.forward_activations_[self.hidden_activation_](layer)
+            self.forward_hidden_activations_[self.hidden_activation_](layer)
         else:
-            self.forward_activations_[self.output_activation_](layer)
+            self._softmax_forward(layer)
 
     def _linear_forward(self, layer):
         self.Z_.append(np.dot(self.W_[layer], self.A_[layer - 1]))
@@ -161,24 +158,18 @@ class FTMultilayerPerceptron():
 
     def _sigmoid_backward(self, layer):
         s = 1 / (1 + np.exp(-self.Z_[layer]))
-        s_prime = s * (1 - s)
-        self.dZ_.insert(0, self.dA_[0] * s_prime)
+        sigmoid_prime = s * (1 - s)
+        self.dZ_.insert(0, self.dA_[0] * sigmoid_prime)
 
-    def _softmax_backward(self, layerd):
-        pass
+    def _softmax_backward(self, layer, y):
+        self.dZ_.insert(0, self.dA_[layer] - y)
     
-    def _activation_backward(self, layer):
+    def _activation_backward(self, layer, y):
         if layer < len(self.dimensions_ - 1):
-            self.backward_activations_[self.hidden_activation_](layer)
+            self.backward_hidden_activations_[self.hidden_activation_](layer)
         else:
-            self.backward_activations_[self.output_activation_](layer)
+            self._softmax_backward(layer, y)
         
-    def _cross_entropy_backward(self, y):
-        '''
-        Lets be careful, maybe it s not the same with softmax, or with l2_reg
-        '''
-        self.dA_.insert(0, - (y / self.A_[-1] - (1 - y) / (1 - self.A_[-1])))
-    
     def _linear_backward(self, layer):
         m = self.A_[layer - 1].shape[1]
         self.dW_.insert(0, (1 / m) * np.dot(self.dZ_[0], self.A_[layer - 1].T))
@@ -191,21 +182,24 @@ class FTMultilayerPerceptron():
         self.dW_ = []
         self.db_ = []
         m = y.shape[1]
-        self._cross_entropy_backward(y)
+
+        # attention, risque de se nmelanger vu que la premiere couche dA n'a pas ete calculee
         for layer in reversed(range(1, len(self.dimensions_))):
-            self._activation_backward(layer)
+            self._activation_backward(layer, y)
             self._linear_backward(layer)
             if self.l2_reg_:
                 self.dW_[0] += (self.lambda_ / m) * self.W_[layer]
             if self.dropout_reg_:
                 self.dA_[0] *= self.D_[layer - 1]
-                self.dA_[0] /= keep_probs[layer - 1]
+                self.dA_[0] /= self.keep_probs_[layer - 1]
             
 
     def _cross_entropy_cost(self, y):
         y_hat = self.A_[-1]
-        return (-1 / y.shape[1]) * np.sum(y * np.log(y_hat + self.epsilon_) + (1 - y) * np.log(1 - y_hat + self.epsilon_))
-    
+        #return (-1 / y.shape[1]) * np.sum(y * np.log(y_hat + self.epsilon_) + (1 - y) * np.log(1 - y_hat + self.epsilon_))
+        return np.squeeze((-1 / y.shape[1] * np.sum(y * np.log(y_hat + self.epsilon_))))
+
+
     def _l2_reg_cost(self, m):
         l2_reg_cost = 0
         for W in self.W_[1:]:
@@ -283,15 +277,15 @@ class FTMultilayerPerceptron():
         self.vdW_.append(None)
         self.vdb_.append(None)
         for layer in range(1, len(self.dimensions_)):
-            self.vdW.append(np.zeros(self.W_[layer].shape))
-            self.vdb.append(np.zeros(self.b_[layer].shape))
+            self.vdW_.append(np.zeros(self.W_[layer].shape))
+            self.vdb_.append(np.zeros(self.b_[layer].shape))
 
     def _rmsprop_initializer(self):
         self.sdW_.append(None)
         self.sdb_.append(None)
         for layer in range(1, len(self.dimensions_)):
-            self.sdW.append(np.zeros(self.W_[layer].shape))
-            self.sdb.append(np.zeros(self.b_[layer].shape))
+            self.sdW_.append(np.zeros(self.W_[layer].shape))
+            self.sdb_.append(np.zeros(self.b_[layer].shape))
 
     def _adam_initializer(self):
         self.vdW_.append(None)
@@ -299,10 +293,10 @@ class FTMultilayerPerceptron():
         self.sdW_.append(None)
         self.sdb_.append(None)
         for layer in range(1, len(self.dimensions_)):
-            self.vdW.append(np.zeros(self.W_[layer].shape))
-            self.vdb.append(np.zeros(self.b_[layer].shape))
-            self.sdW.append(np.zeros(self.W_[layer].shape))
-            self.sdb.append(np.zeros(self.b_[layer].shape))
+            self.vdW_.append(np.zeros(self.W_[layer].shape))
+            self.vdb_.append(np.zeros(self.b_[layer].shape))
+            self.sdW_.append(np.zeros(self.W_[layer].shape))
+            self.sdb_.append(np.zeros(self.b_[layer].shape))
 
 
     def fit(self, X, y, X_dev=None, y_dev=None):
@@ -331,7 +325,7 @@ class FTMultilayerPerceptron():
             if self.early_stopping_:
                 pass
                 
-    def print_learning_curve(costs_train=True, costs_dev=False):
+    def print_learning_curve(self, costs_train=True, costs_dev=False):
         if costs_train:
             plt.plot(self.costs_train_)
         if costs_dev:
@@ -340,7 +334,7 @@ class FTMultilayerPerceptron():
         plt.xlabel('Iterations')
         plt.show()
 
-    def get_costs():
+    def get_costs(self):
         return self.costs_train_, self.costs_dev_
 
 
