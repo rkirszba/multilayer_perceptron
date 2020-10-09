@@ -1,4 +1,6 @@
+import math
 import numpy as np
+import matplotlib.pyplot as plt
 
 ## revoir question des seeds pour l'initialisation de D et des minibatches,
 ## checker toutes les divisions par 0 ou log(0)
@@ -24,6 +26,7 @@ class FTMultilayerPerceptron():
         self.lambda_ = lambd
         self.keep_probs_ = keep_probs
         self.early_stopping_ = early_stopping
+        self.beta_ = beta
         self.beta_1_ = beta_1
         self.beta_2_ = beta_2
         self.epsilon_ = epsilon
@@ -34,11 +37,18 @@ class FTMultilayerPerceptron():
         self.b_ = []
         self.A_ = []
         self.Z_ = []
-        self.D_ = []
         self.dW_ = []
         self.db_ = []
         self.dA_ = []
         self.dZ_ = []
+
+        self.D_ = []
+
+        self.vdW_ = []
+        self.vdb_ = []
+        self.sdW_ = []
+        self.sdb_ = []
+        self.adam_iter_ = 0
 
         self.costs_train_ = []
         self.costs_dev_ = []
@@ -63,11 +73,19 @@ class FTMultilayerPerceptron():
             'softmax': self._softmax_backward
         }
 
+        self.optimizers_initializers_ = {
+            'momentum': self._momentum_initializer,
+            'rmsprop': self._rmsprop_initializer,
+            'adam': self._adam_initializer
+        }
+
         self.optimizers_ = {
             'gradient_descent': self._gradient_descent_optimizer,
             'momentum': self._momentum_optimizer,
+            'rms_prop': self._rmsprop_optimizer,
             'adam': self._adam_optimizer
         }
+
     
     def _he_initialization(self, layer):
         return np.random.randn(self.dimensions_[layer], self.dimensions_[layer - 1])\
@@ -82,8 +100,6 @@ class FTMultilayerPerceptron():
             * np.sqrt(2 / (self.dimensions_[layer - 1] + self.dimensions_[layer]))
 
     def _init_parameters(self):
-        if self.random_state_:
-            np.random.seed(self.random_state_)
         self.W_.append(None)
         self.b_.append(None)
         for layer in range(1, len(self.dimensions_)):
@@ -109,7 +125,7 @@ class FTMultilayerPerceptron():
         self.A_.append(1 / (1 + np.exp(-self.Z_[layer])))
 
     def _softmax_forward(self, layer):
-        pass
+        self.A_.append(np.exp(self.Z_[layer]) / np.exp(self.Z_[layer]).sum(axis=0).reshape(1, -1))
     
     def _activation_forward(self, layer):
         if layer < len(self.dimensions_ - 1):
@@ -157,31 +173,33 @@ class FTMultilayerPerceptron():
         else:
             self.backward_activations_[self.output_activation_](layer)
         
-    def _cost_backward(self, y):
+    def _cross_entropy_backward(self, y):
         '''
         Lets be careful, maybe it s not the same with softmax, or with l2_reg
         '''
-        self.dZ_.insert(0, np.divide(y, self.A_[-1]) - np.divide(1 - y, 1 - self.A_[-1]))
+        self.dA_.insert(0, - (y / self.A_[-1] - (1 - y) / (1 - self.A_[-1])))
     
     def _linear_backward(self, layer):
         m = self.A_[layer - 1].shape[1]
         self.dW_.insert(0, (1 / m) * np.dot(self.dZ_[0], self.A_[layer - 1].T))
         self.db_.insert(0, (1 / m) * np.sum(self.dZ_[0], axis=1, keepdims=True))
-        self.dA_.insert(np.dot(self.W_[layer].T, self.dZ_[0]))
+        self.dA_.insert(0, np.dot(self.W_[layer].T, self.dZ_[0]))
 
     def _backward_propagation(self, y):
         self.dA_ = []
         self.dZ_ = []
         self.dW_ = []
         self.db_ = []
-        self._cost_backward(y)
+        m = y.shape[1]
+        self._cross_entropy_backward(y)
         for layer in reversed(range(1, len(self.dimensions_))):
             self._activation_backward(layer)
             self._linear_backward(layer)
-            if self.dropout_reg_:
-                pass
             if self.l2_reg_:
-                pass
+                self.dW_[0] += (self.lambda_ / m) * self.W_[layer]
+            if self.dropout_reg_:
+                self.dA_[0] *= self.D_[layer - 1]
+                self.dA_[0] /= keep_probs[layer - 1]
             
 
     def _cross_entropy_cost(self, y):
@@ -223,18 +241,76 @@ class FTMultilayerPerceptron():
             self.b_[i] -= self.alpha_ * self.db_[i]
 
     def _momentum_optimizer(self):
-        pass
+        for layer in range(1, len(self.dimensions_)):
+            self.vdW_[layer] = self.beta_ * self.vdW_[layer] + (1 - self.beta_) * self.dW_[layer]
+            self.vdb_[layer] = self.beta_ * self.vdb_[layer] + (1 - self.beta_) * self.db_[layer]
+            self.W_[layer] -= self.alpha_ * self.vdW_[layer]
+            self.b_[layer] -= self.alpha_ * self.vdb_[layer]
+
+    def _rmsprop_optimizer(self):
+        for layer in range(1, len(self.dimensions_)):
+            self.sdW_[layer] = self.beta_ * self.sdW_[layer] + (1 - self.beta_) * np.square(self.dW_[layer])
+            self.sdb_[layer] = self.beta_ * self.sdb_[layer] + (1 - self.beta_) * np.square(self.db_[layer])
+            self.W_[layer] -= self.alpha_ * (self.dW_[layer] / (np.sqrt(self.sdW_[layer]) + self.epsilon_))
+            self.b_[layer] -= self.alpha_ * (self.db_[layer] / (np.sqrt(self.sdW_[layer]) + self.epsilon_))
 
     def _adam_optimizer(self):
-        pass
+        v_corrected_dW = []
+        v_corrected_db = []
+        s_corrected_dW = []
+        s_corrected_db = []
+        v_corrected_dW.append(None)
+        v_corrected_db.append(None)
+        s_corrected_dW.append(None)
+        s_corrected_db.append(None)
+        self.adam_iter_ += 1
+        for layer in range(1, len(self.dimensions_)):
+            self.vdW_[layer] = self.beta_1_ * self.vdW_[layer] + (1 - self.beta_1_) * self.dW_[layer]
+            self.vdb_[layer] = self.beta_1_ * self.vdb_[layer] + (1 - self.beta_1_) * self.db_[layer]
+            v_corrected_dW.append(self.vdW_[layer] / (1 / math.pow(self.beta_1_, self.adam_iter_)))
+            v_corrected_db.append(self.vdb_[layer] / (1 / math.pow(self.beta_1_, self.adam_iter_)))
+            self.sdW_[layer] = self.beta_2_ * self.sdW_[layer] + (1 - self.beta_2_) * np.square(self.dW_[layer])
+            self.sdb_[layer] = self.beta_2_ * self.sdb_[layer] + (1 - self.beta_2_) * np.square(self.db_[layer])
+            s_corrected_dW.append(self.sdW_[layer] / (1 / math.pow(self.beta_2_, self.adam_iter_)))
+            s_corrected_db.append(self.sdb_[layer] / (1 / math.pow(self.beta_2_, self.adam_iter_)))
+            self.W_[layer] -= self.alpha_ * (v_corrected_dW[layer] / (np.sqrt(s_corrected_dW[layer]) + self.epsilon_))
+            self.b_[layer] -= self.alpha_ * (v_corrected_db[layer] / (np.sqrt(s_corrected_db[layer]) + self.epsilon_))
 
     def _update_parameters(self):
         self.optimizers_[self.optimizer_]
 
+    def _momentum_initializer(self):
+        self.vdW_.append(None)
+        self.vdb_.append(None)
+        for layer in range(1, len(self.dimensions_)):
+            self.vdW.append(np.zeros(self.W_[layer].shape))
+            self.vdb.append(np.zeros(self.b_[layer].shape))
+
+    def _rmsprop_initializer(self):
+        self.sdW_.append(None)
+        self.sdb_.append(None)
+        for layer in range(1, len(self.dimensions_)):
+            self.sdW.append(np.zeros(self.W_[layer].shape))
+            self.sdb.append(np.zeros(self.b_[layer].shape))
+
+    def _adam_initializer(self):
+        self.vdW_.append(None)
+        self.vdb_.append(None)
+        self.sdW_.append(None)
+        self.sdb_.append(None)
+        for layer in range(1, len(self.dimensions_)):
+            self.vdW.append(np.zeros(self.W_[layer].shape))
+            self.vdb.append(np.zeros(self.b_[layer].shape))
+            self.sdW.append(np.zeros(self.W_[layer].shape))
+            self.sdb.append(np.zeros(self.b_[layer].shape))
+
 
     def fit(self, X, y, X_dev=None, y_dev=None):
-
+        if self.random_state_:
+            np.random.seed(self.random_state_)
         self._init_parameters()
+        if self.optimizer_ in self.optimizers_initializers_.keys():
+            self.optimizers_initializers_[self.optimizer_]()
         for epoch in range(self.max_epoch_):
             X_batches, y_batches = self._random_mini_batches(X, y, seed=epoch)
             cost_train = 0
@@ -255,7 +331,17 @@ class FTMultilayerPerceptron():
             if self.early_stopping_:
                 pass
                 
+    def print_learning_curve(costs_train=True, costs_dev=False):
+        if costs_train:
+            plt.plot(self.costs_train_)
+        if costs_dev:
+            plt.plot(self.costs_dev_)
+        plt.ylabel('Cost')
+        plt.xlabel('Iterations')
+        plt.show()
 
+    def get_costs():
+        return self.costs_train_, self.costs_dev_
 
 
 
