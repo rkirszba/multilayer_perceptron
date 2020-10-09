@@ -162,7 +162,7 @@ class FTMultilayerPerceptron():
         self.dZ_.insert(0, self.dA_[0] * sigmoid_prime)
 
     def _softmax_backward(self, layer, y):
-        self.dZ_.insert(0, self.dA_[layer] - y)
+        self.dZ_.insert(0, self.A_[layer] - y)
     
     def _activation_backward(self, layer, y):
         if layer < len(self.dimensions_ - 1):
