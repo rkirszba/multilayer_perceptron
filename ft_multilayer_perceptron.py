@@ -312,8 +312,8 @@ class FTMultilayerPerceptron():
     def _verbose_message(self, epoch, end=False):
         message = ''
         if end == True:
-            message += 'End of training: '
-        message = 'epoch {}/{} - loss: {}'.format(epoch, self.max_epoch_, self.costs_train_[-1])
+            message += 'End of training:\n'
+        message += 'epoch {}/{} - loss: {}'.format(epoch, self.max_epoch_, self.costs_train_[-1])
         if len(self.costs_dev_) > 0:
             message += ' - val_loss: {}'.format(self.costs_dev_[-1])
         return message
