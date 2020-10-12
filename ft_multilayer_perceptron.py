@@ -2,16 +2,13 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-## revoir question des seeds pour l'initialisation de D et des minibatches,
-## checker toutes les divisions par 0 ou log(0)
 
 class FTMultilayerPerceptron():
 
     def __init__(self, dimensions, max_epoch=1000, batch_size=200, hidden_activation='relu',\
-        optimizer='gradient_descent', l2_reg=False,\
-        dropout_reg=False, weight_initialization='he', alpha=1e-2, lambd=1e-1,\
-        keep_probs=None, early_stopping=False, beta=0.9, beta_1=0.9, beta_2=0.999, epsilon=1e-8,\
-        random_state=None, verbose=None):
+        optimizer='gradient_descent', l2_reg=False, dropout_reg=False, weight_initialization='he',\
+        alpha=1e-2, lambd=1e-1, keep_probs=None, early_stopping=False, beta=0.9, beta_1=0.9,\
+        beta_2=0.999, patience=50, epsilon=1e-8, random_state=None, verbose=None):
 
         self.dimensions_ = dimensions
         self.max_epoch_ = max_epoch
@@ -28,6 +25,7 @@ class FTMultilayerPerceptron():
         self.beta_ = beta
         self.beta_1_ = beta_1
         self.beta_2_ = beta_2
+        self.patience_ = patience
         self.epsilon_ = epsilon
         self.random_state_ = random_state
         self.verbose_ = verbose
@@ -51,6 +49,8 @@ class FTMultilayerPerceptron():
 
         self.costs_train_ = []
         self.costs_dev_ = []
+
+        self.no_improv_ = 0
 
         self.initializers_ = {
             'he': self._he_initialization,
@@ -83,7 +83,8 @@ class FTMultilayerPerceptron():
             'adam': self._adam_optimizer
         }
 
-    
+
+
     def _he_initialization(self, layer):
         return np.random.randn(self.dimensions_[layer], self.dimensions_[layer - 1])\
             * np.sqrt(2 / self.dimensions_[layer - 1])
@@ -125,15 +126,15 @@ class FTMultilayerPerceptron():
         self.A_.append(np.exp(self.Z_[layer]) / np.exp(self.Z_[layer]).sum(axis=0, keepdims=True))
     
     def _activation_forward(self, layer):
-        if layer < len(self.dimensions_ - 1):
+        if layer < len(self.dimensions_) - 1:
             self.forward_hidden_activations_[self.hidden_activation_](layer)
         else:
             self._softmax_forward(layer)
 
     def _linear_forward(self, layer):
-        self.Z_.append(np.dot(self.W_[layer], self.A_[layer - 1]))
+        self.Z_.append(np.dot(self.W_[layer], self.A_[layer - 1]) + self.b_[layer])
 
-    def _forward_propagation(self, X):
+    def _forward_propagation(self, X, purpose='train'):
         self.A_ = []
         self.Z_ = []
         self.Z_.append(None)
@@ -143,7 +144,7 @@ class FTMultilayerPerceptron():
         for layer in range(1, len(self.dimensions_)):
             self._linear_forward(layer)
             self._activation_forward(layer)
-            if self.dropout_reg_ and layer != len(self.dimensions_ - 1):
+            if purpose == 'train' and self.dropout_reg_ and layer != len(self.dimensions_ - 1):
                 self.A_[layer] *= self.D_[layer]
                 self.A_[layer] /= self.keep_probs_[layer]
 
@@ -165,7 +166,7 @@ class FTMultilayerPerceptron():
         self.dZ_.insert(0, self.A_[layer] - y)
     
     def _activation_backward(self, layer, y):
-        if layer < len(self.dimensions_ - 1):
+        if layer < len(self.dimensions_) - 1:
             self.backward_hidden_activations_[self.hidden_activation_](layer)
         else:
             self._softmax_backward(layer, y)
@@ -182,8 +183,6 @@ class FTMultilayerPerceptron():
         self.dW_ = []
         self.db_ = []
         m = y.shape[1]
-
-        # attention, risque de se nmelanger vu que la premiere couche dA n'a pas ete calculee
         for layer in reversed(range(1, len(self.dimensions_))):
             self._activation_backward(layer, y)
             self._linear_backward(layer)
@@ -192,12 +191,13 @@ class FTMultilayerPerceptron():
             if self.dropout_reg_:
                 self.dA_[0] *= self.D_[layer - 1]
                 self.dA_[0] /= self.keep_probs_[layer - 1]
+        self.dW_.insert(0, None)
+        self.db_.insert(0, None)
             
 
     def _cross_entropy_cost(self, y):
         y_hat = self.A_[-1]
-        #return (-1 / y.shape[1]) * np.sum(y * np.log(y_hat + self.epsilon_) + (1 - y) * np.log(1 - y_hat + self.epsilon_))
-        return np.squeeze((-1 / y.shape[1] * np.sum(y * np.log(y_hat + self.epsilon_))))
+        return np.squeeze((-1 / y.shape[1]) * np.sum(y * np.log(y_hat + self.epsilon_)))
 
 
     def _l2_reg_cost(self, m):
@@ -212,15 +212,15 @@ class FTMultilayerPerceptron():
             cost += self._l2_reg_cost(y.shape[1])
         return cost
 
-    def _random_mini_batches(self, X, y, seed=0):
+    def _random_mini_batches(self, X, y):
         m = X.shape[1]
         permutation = np.random.permutation(m)
         X_shuffled = X[:, permutation]
         y_shuffled = y[:, permutation].reshape(-1, m)
-        nb_batches = m / self.batch_size_
+        nb_batches = m // self.batch_size_
         X_batches = []
         y_batches = []
-        for i in nb_batches:
+        for i in range(nb_batches):
             X_batches.append(X_shuffled[:, i * self.batch_size_ : (i + 1) * self.batch_size_])
             y_batches.append(y_shuffled[:, i * self.batch_size_ : (i + 1) * self.batch_size_])
         if m % self.batch_size_ != 0:
@@ -246,7 +246,7 @@ class FTMultilayerPerceptron():
             self.sdW_[layer] = self.beta_ * self.sdW_[layer] + (1 - self.beta_) * np.square(self.dW_[layer])
             self.sdb_[layer] = self.beta_ * self.sdb_[layer] + (1 - self.beta_) * np.square(self.db_[layer])
             self.W_[layer] -= self.alpha_ * (self.dW_[layer] / (np.sqrt(self.sdW_[layer]) + self.epsilon_))
-            self.b_[layer] -= self.alpha_ * (self.db_[layer] / (np.sqrt(self.sdW_[layer]) + self.epsilon_))
+            self.b_[layer] -= self.alpha_ * (self.db_[layer] / (np.sqrt(self.sdb_[layer]) + self.epsilon_))
 
     def _adam_optimizer(self):
         v_corrected_dW = []
@@ -261,17 +261,17 @@ class FTMultilayerPerceptron():
         for layer in range(1, len(self.dimensions_)):
             self.vdW_[layer] = self.beta_1_ * self.vdW_[layer] + (1 - self.beta_1_) * self.dW_[layer]
             self.vdb_[layer] = self.beta_1_ * self.vdb_[layer] + (1 - self.beta_1_) * self.db_[layer]
-            v_corrected_dW.append(self.vdW_[layer] / (1 / math.pow(self.beta_1_, self.adam_iter_)))
-            v_corrected_db.append(self.vdb_[layer] / (1 / math.pow(self.beta_1_, self.adam_iter_)))
+            v_corrected_dW.append(self.vdW_[layer] / (1 - math.pow(self.beta_1_, self.adam_iter_)))
+            v_corrected_db.append(self.vdb_[layer] / (1 - math.pow(self.beta_1_, self.adam_iter_)))
             self.sdW_[layer] = self.beta_2_ * self.sdW_[layer] + (1 - self.beta_2_) * np.square(self.dW_[layer])
             self.sdb_[layer] = self.beta_2_ * self.sdb_[layer] + (1 - self.beta_2_) * np.square(self.db_[layer])
-            s_corrected_dW.append(self.sdW_[layer] / (1 / math.pow(self.beta_2_, self.adam_iter_)))
-            s_corrected_db.append(self.sdb_[layer] / (1 / math.pow(self.beta_2_, self.adam_iter_)))
+            s_corrected_dW.append(self.sdW_[layer] / (1 - math.pow(self.beta_2_, self.adam_iter_)))
+            s_corrected_db.append(self.sdb_[layer] / (1 - math.pow(self.beta_2_, self.adam_iter_)))
             self.W_[layer] -= self.alpha_ * (v_corrected_dW[layer] / (np.sqrt(s_corrected_dW[layer]) + self.epsilon_))
             self.b_[layer] -= self.alpha_ * (v_corrected_db[layer] / (np.sqrt(s_corrected_db[layer]) + self.epsilon_))
 
     def _update_parameters(self):
-        self.optimizers_[self.optimizer_]
+        self.optimizers_[self.optimizer_]()
 
     def _momentum_initializer(self):
         self.vdW_.append(None)
@@ -299,18 +299,37 @@ class FTMultilayerPerceptron():
             self.sdb_.append(np.zeros(self.b_[layer].shape))
 
 
-    def fit(self, X, y, X_dev=None, y_dev=None):
-        if self.random_state_:
-            np.random.seed(self.random_state_)
+    def _stop_learning(self):
+        if self.costs_dev_[-1] >= self.costs_dev_[-2]:
+            self.no_improv_ += 1
+        return self.no_improv_ == self.patience_
+
+    def _init_all(self):
         self._init_parameters()
         if self.optimizer_ in self.optimizers_initializers_.keys():
             self.optimizers_initializers_[self.optimizer_]()
+    
+    def _verbose_message_iter(self, epoch):
+        message = 'epoch {}/{} - loss: {}'.format(epoch, self.max_epoch_, self.costs_train_[-1])
+        if len(self.costs_dev_) > 0:
+            message += ' - val_loss: {}'.format(self.costs_dev_[-1])
+        return message
+
+    def _verbose_message_stopping(self, epoch):
+        print('Early stopped at epoch {}/{}'.format(epoch, self.max_epoch_))
+
+    def fit(self, X, y, X_dev=None, y_dev=None):
+        if self.random_state_:
+            np.random.seed(self.random_state_)
+        self._init_all()
         for epoch in range(self.max_epoch_):
-            X_batches, y_batches = self._random_mini_batches(X, y, seed=epoch)
-            cost_train = 0
+            if self.random_state_:
+                np.random.seed(self.random_state_ + epoch + 1) 
             if X_dev and y_dev:
-                self._forward_propagation(X_dev)
+                self._forward_propagation(X_dev, purpose='test')
                 self.costs_dev_.append(self._compute_cost(y_dev))
+            X_batches, y_batches = self._random_mini_batches(X, y)
+            cost_train = 0
             for X_batch, y_batch in zip(X_batches, y_batches):
                 self._forward_propagation(X_batch)
                 cost_train += self._compute_cost(y_batch) * X_batch.shape[1]
@@ -318,14 +337,24 @@ class FTMultilayerPerceptron():
                 self._update_parameters()
             self.costs_train_.append(cost_train / X.shape[1])
             if self.verbose_ and epoch % self.verbose_ == 0:
-                message = 'epoch {}/{} - loss: {}'.format(epoch, self.max_epoch_, self.costs_train_[-1])
-                if X_dev and y_dev:
-                    message += ' - val_loss: {}'.format(self.costs_dev_[-1])
-                print(message)
-            if self.early_stopping_:
-                pass
+                print(self._verbose_message_iter(epoch))
+            if epoch > 0 and self.early_stopping_:
+                ''' se contenter de faire un message final early stopping ou non'''
+                if self._stop_learning():
+                    print(self._verbose_message_stopping(epoch))
+                    break
+        return self
+
+    def predict_probas(self, X):
+        self._forward_propagation(X, purpose='test')
+        return self.A_[-1]
+
+    def predict(self, X):
+        self._forward_propagation(X, purpose='test')
+        return np.argmax(self.A_[-1], axis=0).reshape(1, -1)
+
                 
-    def print_learning_curve(self, costs_train=True, costs_dev=False):
+    def plot_learning_curve(self, costs_train=True, costs_dev=False):
         if costs_train:
             plt.plot(self.costs_train_)
         if costs_dev:
