@@ -309,19 +309,20 @@ class FTMultilayerPerceptron():
         if self.optimizer_ in self.optimizers_initializers_.keys():
             self.optimizers_initializers_[self.optimizer_]()
     
-    def _verbose_message_iter(self, epoch):
+    def _verbose_message(self, epoch, end=False):
+        message = ''
+        if end == True:
+            message += 'End of training: '
         message = 'epoch {}/{} - loss: {}'.format(epoch, self.max_epoch_, self.costs_train_[-1])
         if len(self.costs_dev_) > 0:
             message += ' - val_loss: {}'.format(self.costs_dev_[-1])
         return message
 
-    def _verbose_message_stopping(self, epoch):
-        print('Early stopped at epoch {}/{}'.format(epoch, self.max_epoch_))
-
     def fit(self, X, y, X_dev=None, y_dev=None):
         if self.random_state_:
             np.random.seed(self.random_state_)
         self._init_all()
+        final_epoch = self.max_epoch_
         for epoch in range(self.max_epoch_):
             if self.random_state_:
                 np.random.seed(self.random_state_ + epoch + 1) 
@@ -337,12 +338,13 @@ class FTMultilayerPerceptron():
                 self._update_parameters()
             self.costs_train_.append(cost_train / X.shape[1])
             if self.verbose_ and epoch % self.verbose_ == 0:
-                print(self._verbose_message_iter(epoch))
+                print(self._verbose_message(epoch))
             if epoch > 0 and self.early_stopping_:
-                ''' se contenter de faire un message final early stopping ou non'''
                 if self._stop_learning():
-                    print(self._verbose_message_stopping(epoch))
+                    final_epoch = epoch
                     break
+        if self.verbose_:
+            print(self._verbose_message(final_epoch, end=True))
         return self
 
     def predict_probas(self, X):
