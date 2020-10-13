@@ -29,6 +29,8 @@ if __name__ == '__main__':
     X = np.array(dataset.iloc[:, 1:])
     normalizer = Normalizer(X)
     X = normalizer.normalize(X).T
+    X_train = X[:,:1400] 
+    X_dev = X[:,1400:]
     label_map = {
         'Ravenclaw': 0,
         'Slytherin': 1,
@@ -38,7 +40,10 @@ if __name__ == '__main__':
     y = dataset['Hogwarts House'].map(label_map)
     y = np.array(y).reshape(1, -1)
     y = np.eye(4)[:, y].reshape(-1, y.shape[1])
-    classifier = FTMultilayerPerceptron([X.shape[0], 5, 7, 4], verbose=40, max_epoch=1000, optimizer='momentum', random_state=42).fit(X, y)
+    y_train = y[:,:1400]
+    y_dev= y[:,1400:]
+    classifier = FTMultilayerPerceptron([X.shape[0], 7, 7, 4], verbose=40, max_epoch=1000, early_stopping=True, optimizer='adam', random_state=42).fit(X_train, y_train, X_dev=X_dev, y_dev=y_dev)
+    #classifier = FTMultilayerPerceptron([X.shape[0], 5, 7, 4], verbose=40, max_epoch=1000, optimizer='adam', l2_reg=True, random_state=42).fit(X, y)
     '''
     print('\n')
     classifier = FTMultilayerPerceptron([X.shape[0], 5, 7, 4], verbose=40, max_epoch=1000, optimizer='gradient_descent', random_state=42).fit(X, y)
@@ -49,8 +54,7 @@ if __name__ == '__main__':
     print('\n')
     classifier = FTMultilayerPerceptron([X.shape[0], 5, 7, 4], verbose=40, max_epoch=1000, optimizer='adam', random_state=42).fit(X, y)
     '''
-  #  classifier.plot_learning_curve()
-    classifier.predict
+    classifier.plot_learning_curve(costs_dev=True)
     
     f = open('classifier_normalizer.pkl', 'wb')
     pickle.dump((classifier, normalizer), f)
