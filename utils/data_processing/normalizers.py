@@ -5,8 +5,8 @@ import numpy as np
 class FTStandardScaler():
 
     def __init__(self):
-        self.means_ = None
-        self.signas_ = None
+        self.mean_ = None
+        self.std_ = None
 
     def _fit(self, X):
         m = X.shape[1]
@@ -19,11 +19,11 @@ class FTStandardScaler():
         return self
 
     def transform(self, X):
-        return (X - self.means_) / self.std_
+        return (X - self.mean_) / self.std_
 
     def fit_transform(self, X):
         self._fit(X)
-        return (X - self.means_) / self.std_
+        return (X - self.mean_) / self.std_
 
 
 class FTMinMaxScaler():
@@ -39,4 +39,8 @@ class FTMinMaxScaler():
         self.range_ = np.where(self.range_ == 0, 1, self.range_)
 
     def transform(self, X):
+        return (X - self.x_min_) / self.range_
+
+    def fit_transform(self, X):
+        self._fit(X)
         return (X - self.x_min_) / self.range_

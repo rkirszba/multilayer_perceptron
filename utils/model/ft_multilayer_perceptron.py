@@ -367,7 +367,7 @@ class FTMultilayerPerceptron():
             plt.plot(self.costs_dev_, label='Dev set', color='orange')
         plt.legend()
         plt.ylabel('Cost')
-        plt.xlabel('Iterations')
+        plt.xlabel('Epochs')
         plt.show()
 
     def get_costs(self):
