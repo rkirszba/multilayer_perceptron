@@ -7,8 +7,9 @@ class FTMultilayerPerceptron():
 
     def __init__(self, dimensions, max_epoch=1000, batch_size=200, hidden_activation='relu',\
         optimizer='gradient_descent', l2_reg=False, dropout_reg=False, weight_initialization='he',\
-        alpha=1e-2, lambd=1e-1, keep_probs=None, early_stopping=False, beta=0.9, beta_1=0.9,\
-        beta_2=0.999, patience=50, epsilon=1e-8, random_state=None, verbose=None):
+        alpha=1e-2, lambd=1e-1, keep_probs=None, early_stopping=False, decay_rate=None,\
+        alpha_0=0.2, beta=0.9, beta_1=0.9, beta_2=0.999, patience=50, epsilon=1e-8,\
+        random_state=None, verbose=None):
 
         self.dimensions_ = dimensions
         self.max_epoch_ = max_epoch
@@ -22,6 +23,8 @@ class FTMultilayerPerceptron():
         self.lambda_ = lambd
         self.keep_probs_ = keep_probs
         self.early_stopping_ = early_stopping
+        self.decay_rate_ = decay_rate
+        self.alpha_0_ = alpha_0
         self.beta_ = beta
         self.beta_1_ = beta_1
         self.beta_2_ = beta_2
@@ -222,10 +225,15 @@ class FTMultilayerPerceptron():
         self.dW_.insert(0, None)
         self.db_.insert(0, None)
             
+    def _cross_entropy_cost_alter(self, y):
+        y_hat = self.A_[-1]
+        return np.squeeze((-1 / y.shape[1]) * np.sum(y * np.log(y_hat + self.epsilon_)\
+            + (1 - y) * np.log(1 - y_hat + self.epsilon_)))
 
     def _cross_entropy_cost(self, y):
         y_hat = self.A_[-1]
         return np.squeeze((-1 / y.shape[1]) * np.sum(y * np.log(y_hat + self.epsilon_)))
+        
 
 
     def _l2_reg_cost(self, m):
@@ -310,6 +318,7 @@ class FTMultilayerPerceptron():
 
     
     def _verbose_message(self, epoch, end=False):
+        print(self.alpha_)
         message = ''
         if end == True:
             message += 'End of training:\n'
@@ -322,6 +331,10 @@ class FTMultilayerPerceptron():
         if self.random_state_:
             self.random_state_ += 1
             np.random.seed(self.random_state_) 
+    
+    def _update_alpha(self, epoch):
+        if self.decay_rate_:
+            self.alpha_ = (1 / (1 + self.decay_rate_ * epoch)) * self.alpha_0_
 
     def fit(self, X, y, X_dev=None, y_dev=None):
         self._update_random_seed()
@@ -329,6 +342,7 @@ class FTMultilayerPerceptron():
         final_epoch = self.max_epoch_
         for epoch in range(self.max_epoch_):
             self._update_random_seed()
+            self._update_alpha(epoch)
             X_batches, y_batches = self._random_mini_batches(X, y)
             cost_train = 0
             for X_batch, y_batch in zip(X_batches, y_batches):
