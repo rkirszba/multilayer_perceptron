@@ -9,7 +9,7 @@ def cross_entropy_cost(y, y_hat, epsilon=1e-8):
 
 def cross_entropy_cost_alter(y, y_hat, epsilon=1e-8):
     m = y.shape[1]
-    return np.squeeze((-1 / m) * np.sum(y * np.log(y_hat + epsilon),\
+    return np.squeeze((-1 / m) * np.sum(y * np.log(y_hat + epsilon)\
         + (1 - y) * np.log(1 - y_hat + epsilon)))
 
 def accuracy(y_true, y_pred):
@@ -41,10 +41,10 @@ def precision_recall_specificity_fscore(y_true, y_pred):
         recall = tp / (tp + fn) if tp + fn != 0 else 0
         dic['precision'] = precision
         dic['recall'] = recall
-        dic['specificity'] = tn / (tn + fp)
+        dic['specificity'] = tn / (tn + fp) if tn + fp != 0 else 0
         dic['fscore'] = 2 * (precision * recall / (precision + recall)) if precision + recall != 0 else 0
         metrics[label] = dic
-    return pd.DataFrame(metrics)
+    return pd.DataFrame(metrics).T
     
 
 

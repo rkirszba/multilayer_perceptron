@@ -171,7 +171,7 @@ class FTMultilayerPerceptron():
         self.Z_ = []
         self.Z_.append(None)
         self.A_.append(X)
-        if self.dropout_reg_:
+        if self.dropout_reg_ and purpose == 'train':
             self._init_dropout_mask(X.shape[1])
         for layer in range(1, len(self.dimensions_)):
             self._linear_forward(layer)
@@ -251,7 +251,7 @@ class FTMultilayerPerceptron():
     def _random_mini_batches(self, X, y):
         m = X.shape[1]
         permutation = np.random.permutation(m)
-        X_shuffled = X[:, permutation]
+        X_shuffled = X[:, permutation].reshape(-1, m)
         y_shuffled = y[:, permutation].reshape(-1, m)
         nb_batches = m // self.batch_size_
         X_batches = []
@@ -327,26 +327,20 @@ class FTMultilayerPerceptron():
             message += ' - val_loss: {}'.format(self.costs_dev_[-1])
         return message
 
-    def _update_random_seed(self):
-        if self.random_state_:
-            self.random_state_ += 1
-            np.random.seed(self.random_state_) 
-    
     def _update_alpha(self, epoch):
         if self.decay_rate_:
             self.alpha_ = (1 / (1 + self.decay_rate_ * epoch)) * self.alpha_0_
 
     def fit(self, X, y, X_dev=None, y_dev=None):
-        self._update_random_seed()
+        if self.random_state_ is not None:
+            np.random.seed(self.random_state_)
         self._init_all()
         final_epoch = self.max_epoch_
         for epoch in range(self.max_epoch_):
-            self._update_random_seed()
             self._update_alpha(epoch)
             X_batches, y_batches = self._random_mini_batches(X, y)
             cost_train = 0
             for X_batch, y_batch in zip(X_batches, y_batches):
-                self._update_random_seed() 
                 self._forward_propagation(X_batch)
                 cost_train += self._compute_cost(y_batch) * X_batch.shape[1]
                 self._backward_propagation(y_batch)
@@ -384,7 +378,7 @@ class FTMultilayerPerceptron():
         plt.xlabel('Epochs')
         plt.show()
 
-    def get_costs(self):
+    def get_costs_history(self):
         return self.costs_train_, self.costs_dev_
 
 
