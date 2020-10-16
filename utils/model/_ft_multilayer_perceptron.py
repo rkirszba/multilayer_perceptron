@@ -63,12 +63,14 @@ class FTMultilayerPerceptron():
 
         self.forward_hidden_activations_ = {
             'relu': self._relu_forward,
+            'lrelu': self._lrelu_forward,
             'tanh': self._tanh_forward,
             'sigmoid': self._sigmoid_forward
         }
     
         self.backward_hidden_activations_ = {
             'relu': self._relu_backward,
+            'lrelu': self._lrelu_backward,
             'tanh': self._tanh_backward,
             'sigmoid': self._sigmoid_backward
         }
@@ -144,9 +146,11 @@ class FTMultilayerPerceptron():
         if self.optimizer_ in self.optimizers_initializers_.keys():
             self.optimizers_initializers_[self.optimizer_]()
 
-
     def _relu_forward(self, layer):
         self.A_.append(np.maximum(0, self.Z_[layer]))
+
+    def _lrelu_forward(self, layer):
+        self.A_.append(np.maximum(0.1 * self.Z_[layer], self.Z_[layer]))
 
     def _tanh_forward(self, layer):
         self.A_.append(np.tanh(self.Z_[layer]))
@@ -183,6 +187,9 @@ class FTMultilayerPerceptron():
 
     def _relu_backward(self, layer):
         self.dZ_.insert(0, np.where(self.Z_[layer] <= 0, 0, self.dA_[0]))
+
+    def _lrelu_backward(self, layer):
+        self.dZ_.insert(0, np.where(self.Z_[layer] <= 0, 0.1 * self.dA_[0], self.dA_[0]))
 
     def _tanh_backward(self, layer):
         tanh_prime = 1 - np.square(np.tanh(self.Z_[layer]))
@@ -266,9 +273,11 @@ class FTMultilayerPerceptron():
     
 
     def _gradient_descent_optimizer(self):
-        for i in range(1, len(self.W_)):    
-            self.W_[i] -= self.alpha_ * self.dW_[i]
-            self.b_[i] -= self.alpha_ * self.db_[i]
+        for i in range(1, len(self.W_)):
+            tmpW = self.W_[i]
+            self.W_[i] = self.W_[i] - self.alpha_ * self.dW_[i]
+            self.b_[i] = self.b_[i] - self.alpha_ * self.db_[i]
+
 
     def _momentum_optimizer(self):
         for layer in range(1, len(self.dimensions_)):
@@ -318,7 +327,6 @@ class FTMultilayerPerceptron():
 
     
     def _verbose_message(self, epoch, end=False):
-        print(self.alpha_)
         message = ''
         if end == True:
             message += 'End of training:\n'
@@ -328,7 +336,7 @@ class FTMultilayerPerceptron():
         return message
 
     def _update_alpha(self, epoch):
-        if self.decay_rate_:
+        if self.decay_rate_ is not None:
             self.alpha_ = (1 / (1 + self.decay_rate_ * epoch)) * self.alpha_0_
 
     def fit(self, X, y, X_dev=None, y_dev=None):
