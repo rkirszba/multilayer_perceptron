@@ -8,7 +8,7 @@ class FTMultilayerPerceptron():
     def __init__(self, dimensions, max_epoch=1000, batch_size=200, hidden_activation='relu',\
         optimizer='gradient_descent', l2_reg=False, dropout_reg=False, weight_initialization='he',\
         alpha=1e-2, lambd=1e-1, keep_probs=None, early_stopping=False, decay_rate=None,\
-        alpha_0=0.2, beta=0.9, beta_1=0.9, beta_2=0.999, patience=50, epsilon=1e-8,\
+        alpha_0=0.2, beta=0.9, beta_1=0.9, beta_2=0.999, patience=10, epsilon=1e-8,\
         random_state=None, verbose=None):
 
         self.dimensions_ = dimensions

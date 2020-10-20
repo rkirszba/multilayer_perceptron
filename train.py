@@ -11,6 +11,7 @@ from utils.metrics import accuracy, confusion_matrix, precision_recall_specifici
 
 cols_to_drop = [0]
 model_hidden_dims = [20, 20, 20]
+keep_probs = [None, 0.6, 0.6, None]
 random_state = 0
 patience = 10
 
