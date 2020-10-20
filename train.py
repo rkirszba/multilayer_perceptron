@@ -9,24 +9,10 @@ from utils.data_processing.one_hot import one_hot_encoder, one_hot_decoder
 from utils.data_processing.selection import train_dev_split
 from utils.metrics import accuracy, confusion_matrix, precision_recall_specificity_fscore
 
-cols_to_drop = [0,\
-4,\
-6,\
-10,\
-11,\
-13,\
-16,\
-17,\
-18,\
-19,\
-20,\
-21,\
-24,\
-26,\
-31]
-model_hidden_dims = [7, 7]
-keep_probs = [None, 0.6, 0.6, None]
+cols_to_drop = [0]
+model_hidden_dims = [20, 20, 20]
 random_state = 0
+patience = 10
 
 if __name__ == '__main__':
 
@@ -40,7 +26,7 @@ if __name__ == '__main__':
         y = labels_to_numbers(df.iloc[:, :1], labels)
         y = one_hot_encoder(y, len(labels))
 
-        X_train, X_dev, y_train, y_dev = train_dev_split(X, y, random_state=random_state)
+        X_train, X_dev, y_train, y_dev = train_dev_split(X, y, train_size=0.8, random_state=random_state)
 
         scaler = FTStandardScaler()
         X_train = scaler.fit_transform(X_train)
@@ -52,9 +38,12 @@ if __name__ == '__main__':
 
         model = FTMultilayerPerceptron(model_dims,\
             batch_size=30,\
+            hidden_activation='tanh',\
             random_state=random_state,\
             verbose=50,\
-            early_stopping=True)
+            max_epoch=100000,\
+            early_stopping=True,\
+            patience=patience)
         model.fit(X_train, y_train, X_dev=X_dev, y_dev=y_dev)
         model.plot_learning_curve(costs_dev=True)
 

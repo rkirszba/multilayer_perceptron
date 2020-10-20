@@ -323,6 +323,8 @@ class FTMultilayerPerceptron():
     def _stop_learning(self):
         if self.costs_dev_[-1] >= self.costs_dev_[-2]:
             self.no_improv_ += 1
+        else:
+            self.no_improv_ =0
         return self.no_improv_ == self.patience_
 
     

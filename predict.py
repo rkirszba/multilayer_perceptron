@@ -6,21 +6,7 @@ from utils.data_processing.transform_labels import labels_to_numbers
 from utils.data_processing.one_hot import one_hot_encoder, one_hot_decoder
 from utils.metrics import *
 
-cols_to_drop = [0,\
-4,\
-6,\
-10,\
-11,\
-13,\
-16,\
-17,\
-18,\
-19,\
-20,\
-21,\
-24,\
-26,\
-31]
+cols_to_drop = [0]
 
 if __name__ == '__main__':
 
