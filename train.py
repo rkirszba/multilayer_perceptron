@@ -10,15 +10,20 @@ from utils.data_processing.selection import train_dev_split
 from utils.metrics import accuracy, confusion_matrix, precision_recall_specificity_fscore
 
 cols_to_drop = [0]
-model_hidden_dims = [20, 20, 20]
+model_hidden_dims = [32, 16]
 keep_probs = [None, 0.6, 0.6, None]
 random_state = 0
-patience = 10
+patience = 5
+lambd=0.25
 
 if __name__ == '__main__':
 
     try:
-        df = pd.read_csv('data.csv', header=None)
+        if len(sys.argv) != 2:
+            print("Usage: python3 train.py [file].csv")
+            sys.exit(1)
+
+        df = pd.read_csv(sys.argv[1], header=None)
         df = df.drop(columns=cols_to_drop)
 
         X = np.array(df.iloc[:, 1:]).T
@@ -39,11 +44,13 @@ if __name__ == '__main__':
 
         model = FTMultilayerPerceptron(model_dims,\
             batch_size=30,\
-            hidden_activation='tanh',\
+            hidden_activation='relu',\
             random_state=random_state,\
             verbose=50,\
-            max_epoch=100000,\
+            max_epoch=5000,\
             early_stopping=True,\
+            l2_reg=True,
+            lambd=lambd,\
             patience=patience)
         model.fit(X_train, y_train, X_dev=X_dev, y_dev=y_dev)
         model.plot_learning_curve(costs_dev=True)

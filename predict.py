@@ -28,11 +28,9 @@ if __name__ == '__main__':
         y_hat = model.predict_probas(X_test)
         y_pred = model.predict(X_test)
 
-        cost1 = cross_entropy_cost_alter(y_test, y_hat)
-        cost2 = cross_entropy_cost(y_test, y_hat)
+        cost = cross_entropy_cost_alter(y_test, y_hat)
 
-        print('Cross entropy cost as described in the subject          = ' + str(cost1))
-        print('Cross entropy cost more relevant for softmax activation = ' + str(cost2))
+        print('Binary cross entropy cost = ' + str(cost))
 
         accuracy = accuracy(y_test_orig, y_pred)
         print()
@@ -52,7 +50,7 @@ if __name__ == '__main__':
         print()
         print('Other metrics:\n')
         print(other_metrics)
-
+        
 
     except Exception as e:
         print('Something went wrong: ' + str(e))

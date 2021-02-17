@@ -9,8 +9,8 @@ def cross_entropy_cost(y, y_hat, epsilon=1e-8):
 
 def cross_entropy_cost_alter(y, y_hat, epsilon=1e-8):
     m = y.shape[1]
-    return np.squeeze((-1 / m) * np.sum(y * np.log(y_hat + epsilon)\
-        + (1 - y) * np.log(1 - y_hat + epsilon)))
+    return np.squeeze((-1 / m) * np.sum(y[0] * np.log(y_hat[0] + epsilon)\
+        + (1 - y[0]) * np.log(1 - y_hat[0] + epsilon)))
 
 def accuracy(y_true, y_pred):
     correct = ((y_true == y_pred) == True).sum()

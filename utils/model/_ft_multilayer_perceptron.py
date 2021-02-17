@@ -234,8 +234,8 @@ class FTMultilayerPerceptron():
             
     def _cross_entropy_cost_alter(self, y):
         y_hat = self.A_[-1]
-        return np.squeeze((-1 / y.shape[1]) * np.sum(y * np.log(y_hat + self.epsilon_)\
-            + (1 - y) * np.log(1 - y_hat + self.epsilon_)))
+        return np.squeeze((-1 / y.shape[1]) * np.sum(y[0] * np.log(y_hat[0] + self.epsilon_)\
+            + (1 - y[0]) * np.log(1 - y_hat[0] + self.epsilon_)))
 
     def _cross_entropy_cost(self, y):
         y_hat = self.A_[-1]
@@ -251,8 +251,8 @@ class FTMultilayerPerceptron():
     
     def _compute_cost(self, y):
         cost = self._cross_entropy_cost(y)
-        if self.l2_reg_:
-            cost += self._l2_reg_cost(y.shape[1])
+        # if self.l2_reg_:
+            # cost += self._l2_reg_cost(y.shape[1])
         return cost
 
     def _random_mini_batches(self, X, y):
@@ -324,7 +324,7 @@ class FTMultilayerPerceptron():
         if self.costs_dev_[-1] >= self.costs_dev_[-2]:
             self.no_improv_ += 1
         else:
-            self.no_improv_ =0
+            self.no_improv_ = 0
         return self.no_improv_ == self.patience_
 
     
