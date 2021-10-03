@@ -1,7 +1,5 @@
 # multilayer_perceptron
-
-# ft_linear_regression
-42 project dslr
+42 project
 
 
 ## Description
